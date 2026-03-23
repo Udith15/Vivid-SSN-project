@@ -1,0 +1,5 @@
+service,predicted_patients
+emergency,132
+surgery,45
+general_medicine,184
+ICU,24

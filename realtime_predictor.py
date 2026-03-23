@@ -16,7 +16,7 @@ DB_CONFIG = {
     'password': '', # Default XAMPP has no root password
 }
 
-DB_NAME = 'hospital_allocation'
+DB_NAME = 'hospitalresource'
 
 def setup_database():
     """Connects to XAMPP MySQL and creates the necessary database and tables."""
@@ -29,42 +29,47 @@ def setup_database():
         cursor.execute(f"USE {DB_NAME}")
         
         create_table_query = """
-        CREATE TABLE IF NOT EXISTS realtime_predictions (
+        CREATE TABLE IF NOT EXISTS weeklypredictions (
             id INT AUTO_INCREMENT PRIMARY KEY,
-            prediction_time DATETIME,
-            target_week INT,
-            service VARCHAR(50),
-            predicted_patients INT
+            emergency INT,
+            surgery INT,
+            general_medicine INT,
+            ICU INT
         )
         """
         cursor.execute(create_table_query)
         conn.commit()
         cursor.close()
         conn.close()
-        print(f"Database '{DB_NAME}' and table 'realtime_predictions' are ready.")
+        print(f"Database '{DB_NAME}' and table 'weeklypredictions' are ready.")
     except Exception as e:
         print(f"Error setting up database: {e}")
         print("Please ensure XAMPP MySQL Server is running.")
         exit(1)
 
 def insert_predictions(predictions):
-    """Inserts a batch of predictions into the MySQL database."""
+    """Inserts a single row of predictions into the MySQL database."""
     try:
         conn = mysql.connector.connect(**DB_CONFIG, database=DB_NAME)
         cursor = conn.cursor()
         
         insert_query = """
-        INSERT INTO realtime_predictions (prediction_time, target_week, service, predicted_patients)
+        INSERT INTO weeklypredictions (emergency, surgery, general_medicine, ICU)
         VALUES (%s, %s, %s, %s)
         """
         
-        data_tuples = [(p['time'], p['target_week'], p['service'], p['predicted_patients']) for p in predictions]
+        data_tuple = (
+            predictions.get('emergency', 0),
+            predictions.get('surgery', 0),
+            predictions.get('general_medicine', 0),
+            predictions.get('ICU', 0)
+        )
         
-        cursor.executemany(insert_query, data_tuples)
+        cursor.execute(insert_query, data_tuple)
         conn.commit()
         cursor.close()
         conn.close()
-        print(f"[{predictions[0]['time']}] Successfully inserted {len(predictions)} new predictions into MySQL.")
+        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Successfully inserted new predictions into MySQL.")
     except Exception as e:
         print(f"Database insertion failed: {e}")
 
@@ -80,7 +85,7 @@ def run_realtime_predictor():
     
     while True:
         current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        live_predictions = []
+        live_predictions = {}
         
         for s in services:
             service_df = df[df['service'] == s].sort_values('week')
@@ -98,19 +103,14 @@ def run_realtime_predictor():
             forecast = fit_model.forecast(1)[0]
             forecast = max(0, int(round(forecast)))
             
-            live_predictions.append({
-                'time': current_time,
-                'target_week': current_week_target,
-                'service': s,
-                'predicted_patients': forecast
-            })
+            live_predictions[s] = forecast
             
         insert_predictions(live_predictions)
         
         current_week_target += 1
         
-        print("Sleeping for 60 seconds before next prediction wave...")
-        time.sleep(60)
+        print("Sleeping for 10 seconds before next prediction wave...")
+        time.sleep(10)
 
 if __name__ == "__main__":
     run_realtime_predictor()
